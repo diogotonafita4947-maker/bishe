@@ -1,0 +1,16 @@
+# Python 忽略文件
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+db.sqlite3
+.env
+
+# Node/Vue 忽略文件
+node_modules/
+dist/
+npm-debug.log*
+yarn-error.log*
+.DS_Store
+.idea/
+.vscode/
