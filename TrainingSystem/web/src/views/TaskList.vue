@@ -1,97 +1,69 @@
 <template>
-  <div class="task-container">
-    <div class="page-header">
-      <h2>我的实训任务列表</h2>
-      <el-button type="danger" size="small" @click="logout">退出登录</el-button>
-    </div>
-    
-    <div v-if="loading" class="loading-box">
-      <el-icon class="is-loading"><Loading /></el-icon> 数据正在加载中...
-    </div>
+  <div class="list-container">
+    <el-card shadow="never">
+      <template #header>
+        <div class="card-header">
+          <span style="font-weight: bold; font-size: 18px;">📋 学生实训报告管理</span>
+          <el-button type="primary" @click="fetchReports">刷新列表</el-button>
+        </div>
+      </template>
 
-    <el-empty v-if="!loading && tasks.length === 0" description="暂无发布的实训任务" />
-
-    <el-row :gutter="20" v-else>
-      <el-col :span="8" v-for="task in tasks" :key="task.id" style="margin-bottom: 20px;">
-        <el-card shadow="hover" class="task-card">
-          <template #header>
-            <div class="card-header">
-              <span class="task-title">{{ task.title }}</span>
-              <el-tag v-if="task.status === 'published'" type="success" size="small">进行中</el-tag>
-              <el-tag v-else type="info" size="small">已结束</el-tag>
-            </div>
+      <el-table :data="tableData" stripe style="width: 100%" v-loading="loading">
+        <el-table-column prop="student_name" label="提交学生" width="120" />
+        <el-table-column prop="task_title" label="任务名称" min-width="150" />
+        <el-table-column prop="submitted_at" label="提交时间" width="180">
+          <template #default="scope">{{ formatTime(scope.row.submitted_at) }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="scope">
+            <el-tag :type="getStatusType(scope.row.status)">{{ getStatusText(scope.row.status) }}</el-tag>
           </template>
-          
-          <div class="card-content">
-            <p><strong>发布教师：</strong> {{ task.teacher_name }}</p>
-            <p><strong>截止时间：</strong> {{ formatDate(task.end_time) }}</p>
-            <p class="task-desc">{{ task.description || '暂无详细描述' }}</p>
-          </div>
-          
-          <div class="card-footer">
-            <el-button type="primary" plain style="width: 100%" @click="goToEditor(task.id)">
-              进入实训并填写报告
+        </el-table-column>
+        <el-table-column label="操作" width="150" fixed="right">
+          <template #default="scope">
+            <el-button type="primary" size="small" @click="goGrade(scope.row.id)">
+              {{ scope.row.status === 'graded' ? '修改评分' : '去批改' }}
             </el-button>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import http from '../http' // <--- 重点：改用了我们封装的 http
+import http from '../http'
 import { useRouter } from 'vue-router'
-import { Loading } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
 
-const tasks = ref([])
-const loading = ref(true)
 const router = useRouter()
+const tableData = ref([])
+const loading = ref(false)
 
-const goToEditor = (taskId) => {
-  router.push(`/editor/${taskId}`)
-}
-
-// --- 退出登录功能 ---
-const logout = () => {
-  localStorage.removeItem('access_token')
-  localStorage.removeItem('username')
-  router.push('/login')
-  ElMessage.success('已退出登录')
-}
-
-const fetchTasks = async () => {
+const fetchReports = async () => {
   loading.value = true
   try {
-    // <--- 重点：这里不需要写完整网址了，http.js 会自动补全
-    const response = await http.get('tasks/') 
-    tasks.value = response.data
+    const res = await http.get('reports/')
+    tableData.value = res.data
   } catch (error) {
-    console.error('获取失败:', error)
+    console.error(error)
   } finally {
     loading.value = false
   }
 }
 
-const formatDate = (dateStr) => {
-  if (!dateStr) return '无'
-  return dateStr.replace('T', ' ').substring(0, 16)
+const goGrade = (id) => {
+  router.push(`/grade/${id}`)
 }
 
-onMounted(() => {
-  fetchTasks()
-})
+const getStatusType = (s) => ({ 'draft': 'info', 'submitted': 'primary', 'graded': 'success', 'returned': 'danger' }[s] || 'info')
+const getStatusText = (s) => ({ 'draft': '草稿', 'submitted': '待批改', 'graded': '已评分', 'returned': '需重做' }[s] || s)
+const formatTime = (t) => t ? t.substring(0, 16).replace('T', ' ') : '-'
+
+onMounted(() => fetchReports())
 </script>
 
 <style scoped>
-/* 样式保持不变 */
-.task-container { padding: 20px; max-width: 1200px; margin: 0 auto; }
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+.list-container { padding: 20px; max-width: 1200px; margin: 0 auto; }
 .card-header { display: flex; justify-content: space-between; align-items: center; }
-.task-title { font-weight: bold; font-size: 16px; }
-.card-content p { color: #606266; font-size: 14px; margin: 8px 0; }
-.task-desc { color: #909399; font-size: 12px; }
-.card-footer { margin-top: 15px; border-top: 1px dashed #eee; padding-top: 15px; }
 </style>

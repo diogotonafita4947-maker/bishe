@@ -1,49 +1,25 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import Login from '../views/Login.vue'
 import TaskList from '../views/TaskList.vue'
 import ReportEditor from '../views/ReportEditor.vue'
-import Login from '../views/Login.vue'
-import ReportGrade from '../views/ReportGrade.vue' // <--- 1. 确保这里引入了
+import ReportGrade from '../views/ReportGrade.vue'
+import ReportList from '../views/ReportList.vue' // ★ 这一行必须有，且 ReportList.vue 文件必须存在！
 
 const routes = [
-  {
-    path: '/login',
-    name: 'Login',
-    component: Login
-  },
-  {
-    path: '/',
-    redirect: '/tasks'
-  },
-  {
-    path: '/tasks',
-    name: 'TaskList',
-    component: TaskList
-  },
-  {
-    path: '/editor/:id',
-    name: 'ReportEditor',
-    component: ReportEditor
-  }, // <--- 2. 这里的逗号千万不能少！
-  {
-    path: '/grade/:id',
-    name: 'ReportGrade',
-    component: ReportGrade
-  }
+  { path: '/', redirect: '/login' },
+  { path: '/login', name: 'Login', component: Login },
+  { path: '/tasks', name: 'TaskList', component: TaskList },
+  
+  // ★ 重点修复：这里必须叫 :taskId，才能和 ReportEditor.vue 里的代码对应上
+  { path: '/task/:taskId', name: 'ReportEditor', component: ReportEditor },
+  
+  { path: '/teacher/list', name: 'ReportList', component: ReportList },
+  { path: '/grade/:id', name: 'ReportGrade', component: ReportGrade }
 ]
 
 const router = createRouter({
   history: createWebHistory(),
   routes
-})
-
-// --- 路由守卫 ---
-router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem('access_token')
-  if (to.name !== 'Login' && !token) {
-    next({ name: 'Login' })
-  } else {
-    next()
-  }
 })
 
 export default router
