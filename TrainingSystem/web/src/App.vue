@@ -8,5 +8,9 @@
 </script>
 
 <style>
-body { margin: 0; background-color: #f5f7fa; font-family: sans-serif; }
+body {
+  margin: 0;
+  background-color: #f5f7fa;
+  font-family: sans-serif;
+}
 </style>
