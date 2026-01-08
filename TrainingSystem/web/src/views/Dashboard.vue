@@ -1,240 +1,180 @@
 <template>
   <div class="dashboard-container">
-    <div class="nav-header">
-      <div class="header-left">
-        <h2>🏫 教学管理控制台</h2>
+    <el-header class="header">
+      <div class="left">
+        <h2>👋 欢迎回来，{{ studentName }}</h2>
+        <p class="subtitle" v-if="myClass">当前班级：<el-tag>{{ myClass }}</el-tag></p>
+        <p class="subtitle" v-else>🔴 您尚未加入任何教学班</p>
       </div>
-      <div class="header-right">
-        <span class="user-info">老师：{{ currentUsername }}</span>
-        <el-button type="danger" plain @click="handleLogout">退出</el-button>
-      </div>
-    </div>
+      <el-button type="danger" plain @click="logout">退出登录</el-button>
+    </el-header>
 
-    <div class="section-title">
-      <h3>📂 我的班级管理</h3>
-      <div class="actions">
-        <el-button type="success" icon="Position" @click="$router.push('/teacher/create-task')">发布任务</el-button>
-        <el-button type="primary" icon="Plus" @click="showCreateDialog = true">新建班级</el-button>
+    <div class="main-content">
+      
+      <div v-if="!myClass" class="join-box">
+        <el-card shadow="hover" class="join-card">
+          <template #header>
+            <div class="card-header">
+              <span>🚀 加入教学班级</span>
+            </div>
+          </template>
+          <div class="card-body">
+            <el-input 
+              v-model="inviteCode" 
+              placeholder="请输入老师提供的 6 位邀请码" 
+              size="large" 
+              class="code-input"
+              maxlength="6"
+            >
+              <template #prefix>
+                <el-icon><Key /></el-icon>
+              </template>
+            </el-input>
+            <el-button type="primary" size="large" class="join-btn" @click="handleJoin" :loading="joining">
+              立即加入
+            </el-button>
+            <p class="tip">请向您的任课老师获取邀请码</p>
+          </div>
+        </el-card>
       </div>
-    </div>
 
-    <div class="class-grid" v-loading="loading">
-      <el-card v-for="cls in classList" :key="cls.id" shadow="hover" class="class-card" @click="enterClass(cls)">
-        <template #header>
-          <div class="card-header">
-            <span class="class-name">{{ cls.name }}</span>
-            <el-tag type="success" size="small">{{ cls.code }}</el-tag>
-          </div>
-        </template>
-        <div class="card-content">
-          <div class="stat-item">
-            <div class="number">{{ cls.student_count }}</div>
-            <div class="label">学生人数</div>
-          </div>
-          <div class="enter-btn">点击进入管理 ></div>
+      <div v-else>
+        <el-row :gutter="20" class="stat-row">
+          <el-col :span="8">
+            <el-card shadow="hover" class="stat-card" style="border-left: 4px solid #409EFF">
+              <div class="stat-value">{{ pendingCount }}</div>
+              <div class="stat-label">待完成任务</div>
+            </el-card>
+          </el-col>
+          <el-col :span="8">
+            <el-card shadow="hover" class="stat-card" style="border-left: 4px solid #67C23A">
+              <div class="stat-value">{{ finishedCount }}</div>
+              <div class="stat-label">已提交报告</div>
+            </el-card>
+          </el-col>
+        </el-row>
+        
+        <div class="task-section">
+          <h3>📅 我的实训任务</h3>
+          <el-empty v-if="tasks.length === 0" description="老师暂未发布任务" />
+          <el-row :gutter="20" v-else>
+            <el-col :span="12" v-for="task in tasks" :key="task.id" style="margin-bottom: 20px;">
+              <el-card shadow="hover" class="task-card">
+                <template #header>
+                  <div class="task-header">
+                    <span class="task-title">{{ task.title }}</span>
+                    <el-tag :type="getStatusType(task.status)">{{ getStatusText(task.status) }}</el-tag>
+                  </div>
+                </template>
+                <div class="task-desc">
+                  <p>截止时间：{{ formatDate(task.end_time) }}</p>
+                  <p>指导老师：{{ task.teacher_name }}</p>
+                </div>
+                <div class="task-footer">
+                   <el-button type="primary" plain @click="router.push('/tasks')">去完成</el-button>
+                </div>
+              </el-card>
+            </el-col>
+          </el-row>
         </div>
-      </el-card>
+      </div>
 
-      <el-empty v-if="classList.length === 0" description="暂无班级，请先创建" />
     </div>
-
-    <div class="section-title" style="margin-top: 40px;">
-      <h3>📊 全校数据概览</h3>
-    </div>
-    <div class="charts-row">
-      <el-card shadow="hover" class="chart-card">
-        <div ref="pieChartRef" class="chart-box"></div>
-      </el-card>
-      <el-card shadow="hover" class="chart-card">
-        <div ref="barChartRef" class="chart-box"></div>
-      </el-card>
-    </div>
-
-    <el-dialog v-model="showCreateDialog" title="创建新班级" width="400px">
-      <el-input v-model="newClassName" placeholder="请输入班级名称（如：24级软件1班）" />
-      <template #footer>
-        <el-button @click="showCreateDialog = false">取消</el-button>
-        <el-button type="primary" @click="createClass">确定创建</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import http from '../http'
-import * as echarts from 'echarts'
+import { Key } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import http from '../http'
 
 const router = useRouter()
-const loading = ref(false)
-const classList = ref([])
-const currentUsername = localStorage.getItem('username')
+const studentName = ref('')
+const myClass = ref('')
+const inviteCode = ref('')
+const joining = ref(false)
 
-// 弹窗控制
-const showCreateDialog = ref(false)
-const newClassName = ref('')
+const tasks = ref([])
+const pendingCount = ref(0)
+const finishedCount = ref(0)
 
-// 图表Refs
-const pieChartRef = ref(null)
-const barChartRef = ref(null)
+onMounted(async () => {
+  await fetchUserInfo()
+  if (myClass.value) {
+    fetchTasks()
+  }
+})
 
-const handleLogout = () => {
-  localStorage.removeItem('access_token')
+const fetchUserInfo = async () => {
+  try {
+    const res = await http.get('users/me/')
+    studentName.value = res.data.real_name || res.data.username
+    myClass.value = res.data.class_group_name // 如果没加班，这里是 null
+  } catch (e) {
+    ElMessage.error('获取用户信息失败')
+  }
+}
+
+const handleJoin = async () => {
+  if (!inviteCode.value || inviteCode.value.length < 6) return ElMessage.warning('请输入完整的6位邀请码')
+  
+  joining.value = true
+  try {
+    const res = await http.post('classes/join_class/', { invite_code: inviteCode.value })
+    ElMessage.success(res.data.message)
+    // 刷新数据
+    await fetchUserInfo()
+    fetchTasks()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '加入失败，请检查验证码')
+  } finally {
+    joining.value = false
+  }
+}
+
+const fetchTasks = async () => {
+  try {
+    const res = await http.get('tasks/')
+    tasks.value = res.data
+    // 简单统计
+    // 注意：这里需要根据实际情况统计，这里仅做演示
+    pendingCount.value = tasks.value.length
+  } catch (e) {}
+}
+
+const getStatusType = (status) => status === 'finished' ? 'info' : 'success'
+const getStatusText = (status) => status === 'finished' ? '已结束' : '进行中'
+const formatDate = (str) => str ? new Date(str).toLocaleString() : '-'
+
+const logout = () => {
+  localStorage.removeItem('token')
   router.push('/login')
 }
-
-// 1. 获取班级列表
-const fetchClasses = async () => {
-  loading.value = true
-  try {
-    const res = await http.get('classes/')
-    classList.value = res.data
-  } catch (error) {
-    console.error(error)
-  } finally {
-    loading.value = false
-  }
-}
-
-// 2. 创建班级
-const createClass = async () => {
-  if (!newClassName.value) return ElMessage.warning('请输入班级名称')
-  try {
-    await http.post('classes/', { name: newClassName.value })
-    ElMessage.success('创建成功')
-    showCreateDialog.value = false
-    newClassName.value = ''
-    fetchClasses() // 刷新列表
-  } catch (error) {
-    ElMessage.error('创建失败')
-  }
-}
-
-// 3. 进入班级 (带参数跳转到列表页)
-const enterClass = (cls) => {
-  // 跳转到 ReportList，并带上 classId 和 className
-  router.push({
-    path: '/teacher/list',
-    query: { classId: cls.id, className: cls.name }
-  })
-}
-
-// 4. 获取统计图表 (简化版)
-const initCharts = async () => {
-  try {
-    const res = await http.get('dashboard/stats/')
-    const data = res.data
-    // 简单渲染饼图
-    const pieChart = echarts.init(pieChartRef.value)
-    pieChart.setOption({
-      title: { text: '全校作业状态', left: 'center' },
-      tooltip: { trigger: 'item' },
-      series: [{ type: 'pie', radius: '50%', data: data.pie_data }]
-    })
-    // 简单渲染柱状图
-    const barChart = echarts.init(barChartRef.value)
-    barChart.setOption({
-      title: { text: '成绩分布', left: 'center' },
-      xAxis: { type: 'category', data: data.bar_data.categories },
-      yAxis: { type: 'value' },
-      series: [{ type: 'bar', data: data.bar_data.values }]
-    })
-  } catch (e) { }
-}
-
-onMounted(() => {
-  fetchClasses()
-  initCharts()
-})
 </script>
 
 <style scoped>
-.dashboard-container {
-  padding: 20px;
-  background-color: #f5f7fa;
-  min-height: 100vh;
-}
+.dashboard-container { min-height: 100vh; background: #f5f7fa; }
+.header { background: #fff; display: flex; justify-content: space-between; align-items: center; padding: 0 40px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); }
+.subtitle { color: #999; font-size: 14px; margin-top: 5px; }
+.main-content { max-width: 1200px; margin: 30px auto; padding: 0 20px; }
 
-.nav-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #fff;
-  padding: 15px 20px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-}
+/* 加入班级卡片样式 */
+.join-box { display: flex; justify-content: center; margin-top: 80px; }
+.join-card { width: 500px; text-align: center; border-radius: 12px; }
+.card-header { font-size: 18px; font-weight: bold; }
+.card-body { padding: 30px 10px; }
+.code-input { margin-bottom: 20px; font-size: 18px; letter-spacing: 2px; text-align: center; }
+.join-btn { width: 100%; letter-spacing: 4px; font-weight: bold; }
+.tip { margin-top: 15px; color: #909399; font-size: 13px; }
 
-.section-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-/* 班级卡片网格 */
-.class-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 20px;
-}
-
-.class-card {
-  cursor: pointer;
-  transition: all 0.3s;
-  border-radius: 8px;
-}
-
-.class-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.class-name {
-  font-weight: bold;
-  font-size: 16px;
-}
-
-.card-content {
-  text-align: center;
-  padding: 10px 0;
-}
-
-.number {
-  font-size: 32px;
-  font-weight: bold;
-  color: #409EFF;
-}
-
-.label {
-  color: #909399;
-  font-size: 12px;
-  margin-bottom: 15px;
-}
-
-.enter-btn {
-  color: #409EFF;
-  font-size: 14px;
-  border-top: 1px dashed #eee;
-  padding-top: 10px;
-}
-
-/* 图表 */
-.charts-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-}
-
-.chart-box {
-  height: 300px;
-}
+.stat-row { margin-bottom: 30px; }
+.stat-card { text-align: center; border-radius: 8px; }
+.stat-value { font-size: 32px; font-weight: bold; color: #303133; margin-bottom: 5px; }
+.stat-label { color: #909399; }
+.task-header { display: flex; justify-content: space-between; align-items: center; }
+.task-title { font-weight: bold; font-size: 16px; }
+.task-desc { color: #666; font-size: 14px; margin: 15px 0; line-height: 1.6; }
+.task-footer { text-align: right; }
 </style>

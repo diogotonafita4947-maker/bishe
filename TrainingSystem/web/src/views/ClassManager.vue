@@ -1,192 +1,146 @@
 <template>
-    <div class="class-container">
-      <el-card shadow="never">
-        <template #header>
-          <div class="card-header">
-            <span class="title">🏫 班级管理</span>
-            
-            <div class="actions">
-               <el-button @click="router.push('/profile')" round style="margin-right: 10px;">
-                <el-icon style="margin-right: 5px"><User /></el-icon> 个人中心
-              </el-button>
-              <el-button type="primary" @click="dialogVisible = true">
-                <el-icon><Plus /></el-icon> 新建班级
-              </el-button>
-            </div>
-          </div>
-        </template>
-  
-        <el-table :data="classList" stripe v-loading="loading">
-          <el-table-column prop="name" label="班级名称" min-width="150" />
-          
-          <el-table-column prop="invite_code" label="加入邀请码" width="150">
-            <template #default="scope">
-              <el-tag size="large" effect="dark" type="success" style="font-size: 16px; letter-spacing: 1px;">
-                {{ scope.row.invite_code }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          
-          <el-table-column prop="created_at" label="创建时间" width="180">
-             <template #default="scope">{{ formatTime(scope.row.created_at) }}</template>
-          </el-table-column>
-  
-          <el-table-column label="操作" width="150" fixed="right">
-            <template #default="scope">
-              <el-button type="primary" plain size="small" @click="openMemberDialog(scope.row)">
-                <el-icon style="margin-right: 4px"><UserFilled /></el-icon> 成员管理
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-  
-      <el-dialog v-model="dialogVisible" title="创建新班级" width="400px">
-        <el-form :model="form">
-          <el-form-item label="班级名称" label-width="80px">
-            <el-input v-model="form.name" placeholder="例如：2023级软件工程1班" />
-          </el-form-item>
-          <el-form-item label="邀请码" label-width="80px">
-            <el-input v-model="form.invite_code" placeholder="输入6位字符，如：RJ2301" maxlength="6" />
-            <div style="font-size: 12px; color: #999; line-height: 1.2; margin-top: 5px;">
-              学生需要输入此代码才能加入班级。
-            </div>
-          </el-form-item>
-        </el-form>
-        <template #footer>
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="createClass">确定创建</el-button>
-        </template>
-      </el-dialog>
-  
-      <el-dialog v-model="memberDialogVisible" :title="`成员管理 - ${currentClass.name}`" width="600px">
-        <div v-loading="memberLoading">
-          <div style="margin-bottom: 15px; color: #666;">
-            当前班级共 <span style="color: #409EFF; font-weight: bold;">{{ studentList.length }}</span> 人
-          </div>
-  
-          <el-table :data="studentList" height="300" border>
-            <el-table-column prop="username" label="姓名" />
-            <el-table-column prop="student_id" label="学号" width="150">
-              <template #default="scope">{{ scope.row.student_id || '-' }}</template>
-            </el-table-column>
-            
-            <el-table-column label="操作" width="100" align="center">
-              <template #default="scope">
-                <el-button 
-                  type="danger" 
-                  link 
-                  size="small" 
-                  @click="removeStudent(scope.row)"
-                >
-                  移除
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </el-dialog>
+  <div class="class-container">
+    <div class="header">
+      <h2>我的教学班级</h2>
+      <el-button type="primary" icon="Plus" @click="dialogVisible = true">创建新班级</el-button>
     </div>
-  </template>
-  
-  <script setup>
-  import { ref, onMounted } from 'vue'
-  import http from '../http'
-  import { useRouter } from 'vue-router'
-  import { Plus, User, UserFilled } from '@element-plus/icons-vue' // 引入新图标
-  import { ElMessage, ElMessageBox } from 'element-plus'
-  
-  const router = useRouter()
-  const loading = ref(false)
-  const classList = ref([])
-  const dialogVisible = ref(false)
-  const form = ref({ name: '', invite_code: '' })
-  
-  // 成员管理相关数据
-  const memberDialogVisible = ref(false)
-  const memberLoading = ref(false)
-  const currentClass = ref({})
-  const studentList = ref([])
-  
-  // 1. 获取班级列表
-  const fetchClasses = async () => {
-    loading.value = true
-    try {
-      const res = await http.get('classes/')
-      classList.value = res.data
-    } catch (error) {
-      console.error(error)
-    } finally {
-      loading.value = false
-    }
-  }
-  
-  // 2. 创建班级
-  const createClass = async () => {
-    if(!form.value.name || !form.value.invite_code) return ElMessage.warning('请填写完整')
-    try {
-      await http.post('classes/', form.value)
-      ElMessage.success('班级创建成功')
-      dialogVisible.value = false
-      form.value = { name: '', invite_code: '' }
-      fetchClasses()
-    } catch (error) {
-      ElMessage.error('创建失败，可能是邀请码已存在')
-    }
-  }
-  
-  // 3. ★ 打开成员列表
-  const openMemberDialog = async (row) => {
-    currentClass.value = row
-    memberDialogVisible.value = true
-    fetchStudents(row.id)
-  }
-  
-  // 4. ★ 获取该班级的所有学生
-  const fetchStudents = async (classId) => {
-    memberLoading.value = true
-    try {
-      // 调用我们刚写的后端筛选接口
-      const res = await http.get(`users/?class_group=${classId}`)
-      studentList.value = res.data
-    } catch (error) {
-      console.error(error)
-      ElMessage.error('获取成员失败')
-    } finally {
-      memberLoading.value = false
-    }
-  }
-  
-  // 5. ★ 移除学生 (踢人)
-  const removeStudent = (student) => {
-    ElMessageBox.confirm(
-      `确定要将学生 "${student.username}" 移除出本班级吗？`,
-      '移除确认',
-      { type: 'warning' }
-    ).then(async () => {
-      try {
-        // 核心逻辑：把该用户的 class_group 字段设为 null
-        await http.patch(`users/${student.id}/`, {
-          class_group: null
-        })
-        ElMessage.success('移除成功')
-        // 刷新列表
-        fetchStudents(currentClass.value.id)
-      } catch (error) {
-        ElMessage.error('移除失败')
-      }
+
+    <div class="class-list" v-loading="loading">
+      <el-empty v-if="classes.length === 0" description="暂无班级，请创建后将邀请码发给学生" />
+      
+      <el-card v-for="cls in classes" :key="cls.id" class="class-card" shadow="hover">
+        <template #header>
+          <div class="card-title">
+            <span>{{ cls.name }}</span>
+            <el-tag size="large" effect="dark" type="warning" style="font-weight:bold; letter-spacing:1px">
+              邀请码: {{ cls.invite_code }}
+            </el-tag>
+          </div>
+        </template>
+        <div class="card-content">
+          <div class="info-row">
+            <span class="label">学生人数：</span>
+            <span class="val">{{ cls.student_count || 0 }} 人</span>
+          </div>
+          <p class="tip">邀请码由系统随机生成，请告知学生。</p>
+          <div class="btn-group">
+            <el-button type="primary" link @click="viewStudents(cls)">管理名单</el-button>
+            <el-popconfirm title="确定解散该班级吗？" @confirm="deleteClass(cls.id)">
+              <template #reference>
+                <el-button type="danger" link>解散</el-button>
+              </template>
+            </el-popconfirm>
+          </div>
+        </div>
+      </el-card>
+    </div>
+
+    <el-dialog v-model="dialogVisible" title="创建教学班级" width="400px">
+      <el-form :model="form">
+        <el-form-item label="班级名称">
+          <el-input v-model="form.name" placeholder="例如：Java实训-周三班" />
+        </el-form-item>
+        <el-alert title="邀请码将由系统自动生成，确保不重复" type="info" :closable="false" show-icon />
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="createClass">立即创建</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="studentVisible" :title="currentClass?.name + ' - 学生名单'" width="600px">
+      <el-table :data="studentList" stripe height="400">
+        <el-table-column prop="real_name" label="姓名" width="120" />
+        <el-table-column prop="student_id" label="学号" width="150" />
+        <el-table-column label="操作" align="center">
+          <template #default="scope">
+            <el-button type="danger" link size="small">移出班级</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, onMounted } from 'vue'
+import { Plus } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import http from '../http'
+
+const loading = ref(false)
+const classes = ref([])
+const dialogVisible = ref(false)
+const studentVisible = ref(false)
+const currentClass = ref(null)
+const studentList = ref([])
+
+const form = reactive({ name: '' })
+
+onMounted(() => {
+  fetchClasses()
+})
+
+const fetchClasses = async () => {
+  loading.value = true
+  try {
+    const res = await http.get('classes/')
+    classes.value = res.data
+    classes.value.forEach(async (cls) => {
+      const sRes = await http.get(`classes/${cls.id}/students/`)
+      cls.student_count = sRes.data.length
     })
+  } catch (e) {
+    ElMessage.error('获取班级失败')
+  } finally {
+    loading.value = false
   }
-  
-  const formatTime = (t) => t ? t.substring(0, 10) : '-'
-  
-  onMounted(() => {
+}
+
+const createClass = async () => {
+  if (!form.name) return ElMessage.warning('请输入班级名称')
+  try {
+    // 只有 name，没有 invite_code，后端会自动生成
+    await http.post('classes/', form)
+    ElMessage.success('创建成功！')
+    dialogVisible.value = false
+    form.name = ''
     fetchClasses()
-  })
-  </script>
-  
-  <style scoped>
-  .class-container { padding: 20px; max-width: 1000px; margin: 0 auto; }
-  .card-header { display: flex; justify-content: space-between; align-items: center; }
-  .title { font-size: 18px; font-weight: bold; }
-  </style>
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '创建失败')
+  }
+}
+
+const deleteClass = async (id) => {
+  try {
+    await http.delete(`classes/${id}/`)
+    ElMessage.success('已解散')
+    fetchClasses()
+  } catch (e) {
+    ElMessage.error('删除失败')
+  }
+}
+
+const viewStudents = async (cls) => {
+  currentClass.value = cls
+  studentVisible.value = true
+  try {
+    const res = await http.get(`classes/${cls.id}/students/`)
+    studentList.value = res.data
+  } catch (e) {
+    ElMessage.error('获取名单失败')
+  }
+}
+</script>
+
+<style scoped>
+.class-container { padding: 20px; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.class-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
+.class-card { border-radius: 8px; }
+.card-title { display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 16px; }
+.card-content { padding: 10px 0; }
+.info-row { font-size: 14px; margin-bottom: 10px; }
+.tip { font-size: 12px; color: #909399; margin-bottom: 15px; background: #f4f4f5; padding: 8px; border-radius: 4px; }
+.btn-group { border-top: 1px solid #eee; padding-top: 10px; display: flex; justify-content: flex-end; gap: 10px; }
+</style>
