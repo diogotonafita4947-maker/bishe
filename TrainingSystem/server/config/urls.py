@@ -2,28 +2,17 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-# 务必确认这两行导入存在
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView,
-)
 
 urlpatterns = [
+    # 管理员后台
     path('admin/', admin.site.urls),
-
-    # ============================================================
-    # ★★★ 核心修复：登录接口必须放在第一位！ ★★★
-    # ============================================================
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-
-    # ============================================================
-    # 通用业务接口必须放在最后
-    # 任何以 'api/' 开头的其他请求，都会进到这里
-    # ============================================================
+    
+    # ★★★ 核心分发：将所有 api/ 开头的请求转发给 core 应用的 urls.py 处理 ★★★
+    # 这样前端请求 http://localhost:8000/api/tasks/ 才能生效
     path('api/', include('core.urls')), 
 ]
 
-# 媒体文件路由
+# ★★★ 关键配置：允许在开发模式下通过 URL 访问上传的图片/文件 ★★★
+# 如果没有这段代码，您上传的截图虽然在硬盘里，但浏览器访问 http://.../media/xxx.png 会报 404
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
