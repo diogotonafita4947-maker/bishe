@@ -169,6 +169,13 @@ class ClassGroupViewSet(viewsets.ModelViewSet):
 
 # ... (上面的代码保持不变)
 
+# ... (保持上面的引用不变)
+
+# ★★★ 修复：真正的 Word 解析逻辑 ★★★
+# ... (保留头部引用)
+
+# ... (保持头部引用不变)
+
 class ReportTemplateViewSet(viewsets.ModelViewSet):
     queryset = ReportTemplate.objects.all()
     serializer_class = ReportTemplateSerializer
@@ -184,52 +191,55 @@ class ReportTemplateViewSet(viewsets.ModelViewSet):
             document = Document(file)
             structure = []
             
-            # ★★★ 智能解析逻辑 ★★★
-            # 规则：
-            # 1. 遇到带【】的，识别为学生填空题 (例如：【实验心得】)
-            # 2. 其他文字，识别为普通说明段落
-            
             for para in document.paragraphs:
                 text = para.text.strip()
                 if not text: continue
                 
-                # 简单清洗：去掉莫名其妙的符号
-                clean_text = text.replace('：', '').replace(':', '')
-
-                if '【' in text and '】' in text:
-                    # 提取括号里的字作为标题
+                # ★★★ 规则 1：{{ }} 双大括号 -> 老师发布时填写 ★★★
+                # 例如 Word 里写：实验目的：{{实验目的}}
+                # 系统会生成一个输入框，老师发布任务时填写具体目的
+                if '{{' in text and '}}' in text:
+                    start = text.find('{{') + 2
+                    end = text.find('}}')
+                    label = text[start:end] # 提取出 "实验目的"
+                    
+                    structure.append({
+                        "type": "teacher_block", # 标记：老师块
+                        "label": label,
+                        "value": "" # 默认为空，等老师在网页上填
+                    })
+                
+                # ★★★ 规则 2：【 】中括号 -> 学生做题时填写 ★★★
+                elif '【' in text and '】' in text:
                     start = text.find('【') + 1
                     end = text.find('】')
                     label = text[start:end]
                     
                     structure.append({
-                        "type": "textarea", # 学生填写的文本域
+                        "type": "textarea", # 标记：学生输入框
                         "label": label,
                         "value": ""
                     })
+                
+                # 规则 3：普通说明文字
                 else:
-                    # 普通文本
                     structure.append({
-                        "type": "paragraph", # 纯展示文本
+                        "type": "paragraph",
                         "label": "说明",
                         "value": text
                     })
             
-            # 保存到数据库
             template = ReportTemplate.objects.create(
                 title=file.name.replace('.docx', '').replace('.doc', ''),
-                description="由 Word 自动导入",
+                description="Word 自动导入",
                 content_structure=structure
             )
-            
             return Response(ReportTemplateSerializer(template).data)
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            import traceback; traceback.print_exc()
             return Response({'error': str(e)}, 500)
 
-# ... (下面的代码保持不变)
-
+# ... (保持下面的代码不变)
 class TrainingTaskViewSet(viewsets.ModelViewSet):
     serializer_class = TrainingTaskSerializer; permission_classes = [IsAuthenticated]
     def get_queryset(self): return TrainingTask.objects.all() 
