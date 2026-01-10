@@ -1,6 +1,5 @@
 <template>
   <div class="editor-layout" v-loading="loading">
-    
     <div class="editor-header">
       <div class="header-left">
         <el-button link @click="router.back()" class="nav-btn">
@@ -16,23 +15,31 @@
             <el-icon><CircleCheckFilled /></el-icon> 已结束
             <span class="header-score"> | 最终成绩：{{ score }} 分</span>
           </div>
-
           <div v-else-if="reportStatus === 'returned'" class="status-text returned">
             <el-icon><WarningFilled /></el-icon> 作业被退回 (请修改重交)
             <span class="count-text">第 {{ submitCount }} / {{ maxSubmissions }} 次</span>
           </div>
-
           <div v-else-if="reportStatus === 'submitted'" class="status-text submitted">
             <el-icon><Clock /></el-icon> 已提交 (等待批改)
             <span class="count-text">第 {{ submitCount }} / {{ maxSubmissions }} 次</span>
           </div>
-
           <div v-else class="status-text draft">
             <el-icon><Edit /></el-icon> 草稿 (自动保存中)
             <span class="count-text">第 {{ submitCount }} / {{ maxSubmissions }} 次</span>
           </div>
         </div>
         
+        <el-button 
+          type="success" 
+          plain 
+          class="action-btn" 
+          @click="exportWord" 
+          :loading="exporting"
+          style="margin-right: 10px;"
+        >
+          <el-icon><Download /></el-icon> 导出 Word
+        </el-button>
+
         <el-button 
           v-if="reportStatus === 'graded'"
           type="info" 
@@ -59,12 +66,19 @@
       <div class="paper-wrapper">
         <div class="a4-sheet">
           <div class="sheet-header">
-            <h1 class="main-title">{{ taskTitle }}</h1>
-            <div class="sub-title">计算机工程学院 · 实训实验报告</div>
+            <div class="sub-title" style="font-size: 16px; margin-bottom: 10px; color: #000; font-family: 'SimHei'">
+              <u>{{ studentCollege || '____' }}</u> 学院 
+              <u>{{ studentMajor || '____' }}</u> 专业学生实
+            </div>
+            <h1 class="main-title">训 (验) 报 告</h1>
           </div>
 
           <div class="info-table-container">
             <div class="info-grid">
+              <div class="info-item">
+                <span class="label">实训地点：</span>
+                <span class="value">{{ taskLocation }}</span>
+              </div>
               <template v-for="(item, index) in reportContent">
                 <div v-if="item.type === 'info_row'" :key="'info-'+index" class="info-item">
                   <span class="label">{{ item.label }}：</span>
@@ -78,15 +92,12 @@
           <div class="sheet-content">
             <div v-for="(item, index) in reportContent" :key="index" class="content-row">
               <template v-if="item.type !== 'info_row'">
-                
                 <div v-if="item.type === 'teacher_block'" class="static-block">
                   <div class="block-label">{{ item.label }}</div>
                   <div class="block-text">{{ item.value }}</div>
                 </div>
-
                 <div v-else-if="item.type === 'header'" class="section-title">{{ item.value }}</div>
                 <div v-else-if="item.type === 'paragraph'" class="normal-text">{{ item.value }}</div>
-
                 <div v-else-if="item.type === 'textarea'" class="input-wrapper">
                   <div class="input-label">【 {{ item.label }} 】</div>
                   <div v-if="!canEdit" class="read-only-box" v-html="item.value || '未填写'"></div>
@@ -98,7 +109,6 @@
                     @update:modelValue="handleInput"
                   />
                 </div>
-
                 <div v-else-if="item.type === 'upload'" class="upload-wrapper">
                   <div class="section-subtitle">{{ item.label }}</div>
                   <div class="file-list" v-if="fileList.length > 0">
@@ -118,7 +128,6 @@
                     <el-button link type="primary" size="default">+ 上传文件</el-button>
                   </el-upload>
                 </div>
-
               </template>
             </div>
           </div>
@@ -138,16 +147,21 @@
 <script setup>
 import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Document, CircleCheckFilled, WarningFilled, Clock, Edit } from '@element-plus/icons-vue'
+import { ArrowLeft, Document, CircleCheckFilled, WarningFilled, Clock, Edit, Download } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '../http'
 import RichEditor from '../components/RichEditor.vue'
 
 const route = useRoute(); const router = useRouter(); const taskId = route.params.id
 const loading = ref(true)
+const exporting = ref(false)
+
 const reportId = ref(null); const taskTitle = ref(''); const reportStatus = ref('draft')
 const score = ref(0); const feedback = ref('')
 const submitCount = ref(0); const maxSubmissions = ref(1)
+const taskLocation = ref('') 
+const studentCollege = ref('')
+const studentMajor = ref('')
 
 const studentName = ref(''); const studentNumber = ref(''); const studentClass = ref(''); const teacherName = ref('')
 const reportContent = ref([]); const fileList = ref([])
@@ -171,6 +185,12 @@ const initData = async () => {
     studentClass.value = data.student_class || ''; teacherName.value = data.teacher_name || ''
     score.value = data.score; feedback.value = data.feedback
     submitCount.value = data.submit_count; maxSubmissions.value = data.task_max_submissions
+    
+    taskLocation.value = data.task_location || '计算机实训中心'
+    
+    // ★★★ 获取学院和专业 ★★★
+    studentCollege.value = data.student_college
+    studentMajor.value = data.student_major
 
     const isImage = (n) => n.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/i)
     fileList.value = data.attachments_list
@@ -232,6 +252,30 @@ const saveReport = async (statusType, silent=false) => {
 const submitReport = () => {
   if (submitCount.value >= maxSubmissions.value) return ElMessage.warning(`已达到最大提交次数 (${maxSubmissions.value}次)，无法再次提交`)
   ElMessageBox.confirm('提交后将无法修改，除非老师打回。确认提交？', '提示', { type: 'warning' }).then(() => saveReport('submitted'))
+}
+
+const exportWord = async () => {
+  if (!reportId.value) return
+  exporting.value = true
+  try {
+    const res = await http.get(`reports/${reportId.value}/export_docx/`, {
+      responseType: 'blob'
+    })
+    const url = window.URL.createObjectURL(new Blob([res.data]))
+    const link = document.createElement('a')
+    link.href = url
+    const fileName = `${taskTitle.value || '实训报告'}-${studentName.value || '学生'}.docx`
+    link.setAttribute('download', fileName)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch(e) {
+    ElMessage.error('导出失败')
+  } finally {
+    exporting.value = false
+  }
 }
 </script>
 
